@@ -1,0 +1,7 @@
+[tool.ruff]
+line-length = 100
+exclude = ["alembic/*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
