@@ -1,0 +1,49 @@
+version: '3.8'
+services:
+  backend:
+    build: .
+    volumes:
+      - ./:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:///./cmsai.db
+      - REMOVED${OPENAI_API_KEY}
+      - WORDPRESS_URL=http://wordpress:80
+      - WORDPRESS_USERNAME=${WP_USER}
+      - WORDPRESS_PASSWORD=${WP_PASS}
+    depends_on:
+      - wordpress
+  frontend:
+    build:
+      context: frontend
+    ports:
+      - "3000:80"   # serve frontend at 3000
+    depends_on:
+      - backend
+  wordpress:
+    image: wordpress:6.2
+    restart: always
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_USER: wpuser
+      WORDPRESS_DB_PASSWORD: wppass
+      WORDPRESS_DB_NAME: wpdb
+    volumes:
+      - ./docker/wordpress:/var/www/html
+    ports:
+      - "8080:80"
+    depends_on:
+      - db
+  db:
+    image: mariadb:10.5
+    restart: always
+    environment:
+      MYSQL_DATABASE: wpdb
+      MYSQL_USER: wpuser
+      MYSQL_PASSWORD: wppass
+      MYSQL_ROOT_PASSWORD: rootpass
+    volumes:
+      - db_data:/var/lib/mysql
+volumes:
+  db_data:

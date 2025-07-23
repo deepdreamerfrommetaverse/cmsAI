@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.env
+node_modules/
+dist/
+*.sqlite3
+.vscode/
+.idea/
+
+# never push real secrets
+*.env
+.env.*

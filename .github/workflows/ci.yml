@@ -1,0 +1,58 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:13
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cmsai
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Lint frontend
+        working-directory: frontend
+        run: npm run lint || echo "Frontend lint warnings"
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+      - name: Install backend dependencies
+        run: pip install -r requirements.txt
+      - name: Apply migrations
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/cmsai
+        run: alembic upgrade head
+      - name: Run backend tests
+        run: pytest -q
+      - name: Run Playwright tests
+        uses: microsoft/playwright-github-action@v1
+        with:
+          run: npm run test:e2e
+      - name: Build Electron App
+        if: github.ref_type == 'tag'
+        run: npm run electron:build  # assumes a script to build electron packages
+      - name: Upload Artifacts
+        if: github.ref_type == 'tag'
+        uses: actions/upload-artifact@v3
+        with:
+          name: electron-builds
+          path: release-builds/

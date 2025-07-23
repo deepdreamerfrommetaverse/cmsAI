@@ -1,0 +1,42 @@
+version: '3.9'
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: cmsai-frontend:latest
+    container_name: cmsai_frontend
+    ports:
+      - "80:80"               # mapowanie frontendu na localhost:80
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile   # Dockerfile backendu (przyjmujemy że jest w ./backend/)
+    image: cmsai-backend:latest
+    container_name: cmsai_backend
+    expose:
+      - "8000"                # udostępnia port do sieci wewnętrznej (dla frontendu)
+    environment:
+      - DATABASE_URL=${DATABASE_URL}   # zmienne środowiskowe wczytywane z .env
+      - SECRET_KEY=${SECRET_KEY}
+      - REMOVED${OPENAI_API_KEY}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - ... (inne potrzebne do backendu)
+    # optionally, mount volumes for dev (not needed in prod)
+
+  # (opcjonalnie) baza danych, np. PostgreSQL:
+  db:
+    image: postgres:15-alpine
+    container_name: cmsai_db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+volumes:
+  db_data:
