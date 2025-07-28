@@ -1,4 +1,18 @@
-from pydantic import BaseSettings
+from pathlib import Path
+from functools import lru_cache
+
+# --- kluczowa zmiana: ---
+try:
+    # Pydantic 2.x
+    from pydantic_settings import BaseSettings
+except ImportError:          # awaryjnie, gdy ktoś jednak ma Pydantic 1.x
+    from pydantic import BaseSettings
+
+from pydantic import Field, AnyUrl
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+
 
 class Settings(BaseSettings):
     # Database
@@ -31,10 +45,14 @@ class Settings(BaseSettings):
     instagram_access_token: str = ""
     instagram_user_id: str = ""        # Business Account ID for Instagram posting
     instagram_daily_limit: int = 5
+    admin_email: str = Field("admin@example.com", env="ADMIN_EMAIL")
+    admin_password: str = Field("Radek125r!",     env="ADMIN_PASSWORD")
 
     class Config:
-        env_file = ".env"
+        env_file = Path(__file__).resolve().parents[1] / ".env"
         env_file_encoding = "utf-8"
+
+
 
 # Instantiate settings singleton
 settings = Settings()

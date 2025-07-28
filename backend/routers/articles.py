@@ -1,7 +1,6 @@
 import re
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-
 from schemas.article import ArticleCreate, ArticleGenerateRequest, ArticleUpdate, ArticleOut
 from database import get_db
 from services import article_service
@@ -60,7 +59,12 @@ def update_article(article_id: int, update: ArticleUpdate, db: Session = Depends
     article = db.query(article_service.ArticleModel).get(article_id)
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
-    updated_article = article_service.update_article(db, article, update.title if update.title is not None else article.title, update.content if update.content is not None else article.content)
+    updated_article = article_service.update_article(
+        db,
+        article,
+        update.title if update.title is not None else article.title,
+        update.content if update.content is not None else article.content
+    )
     return updated_article
 
 @router.delete("/{article_id}", status_code=204)
@@ -88,9 +92,12 @@ def get_article_versions(article_id: int, db: Session = Depends(get_db), current
     article = db.query(article_service.ArticleModel).get(article_id)
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
-    versions = article.versions
+    versions = article.versions  # relationship defined in Article model
     # Return list of diffs with timestamps
-    return [{"id": v.id, "created_at": v.created_at.isoformat(), "diff": v.diff} for v in sorted(versions, key=lambda x: x.created_at, reverse=True)]
+    return [
+        {"id": v.id, "created_at": v.created_at.isoformat(), "diff": v.diff}
+        for v in sorted(versions, key=lambda x: x.created_at, reverse=True)
+    ]
 
 @router.get("/{article_id}/export/pdf")
 def export_article_pdf(article_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
@@ -98,25 +105,14 @@ def export_article_pdf(article_id: int, db: Session = Depends(get_db), current_u
     article = db.query(article_service.ArticleModel).get(article_id)
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
-    # Build HTML content
-    html_content = f"""
-    <html>
-      <head>
-        <meta charset="utf-8">
-        <title>{article.title}</title>
-        <style>
-          body {{ font-family: Arial, sans-serif; margin: 50px; }}
-          h1 {{ font-size: 2em; margin-bottom: 0.5em; }}
-          h2 {{ font-size: 1.5em; margin-top: 1em; }}
-          p {{ line-height: 1.6; }}
-        </style>
-      </head>
-      <body>
-        <h1>{article.title}</h1>
-        {article.content}
-      </body>
-    </html>
-    """
+    # Build HTML content for PDF
+    # [zmiana] Używamy prawidłowych znaczników HTML zamiast Markdown:
+    html_content = (
+        f"<html><head><meta charset='UTF-8'><title>{article.title}</title></head><body>"
+        f"<h1>{article.title}</h1>"
+        f"<div>{article.content}</div>"
+        f"</body></html>"
+    )
     from weasyprint import HTML
     pdf_bytes = HTML(string=html_content).write_pdf()
     # Generate filename slug

@@ -8,6 +8,7 @@ python-dotenv==1.0.1
 email-validator==2.1.1
 PyJWT==2.9.0           # najnowsza w repozytorium PyPI
 passlib[bcrypt]==1.7.4
+bcrypt==3.2.0
 requests==2.32.2
 openai==1.25.0
 tweepy==4.14.0         # najwyższa dostępna wersja
@@ -25,3 +26,4 @@ flake8==7.0.0
 black==24.3.0
 isort==5.13.2
 mypy==1.10.0
+pydantic-settings==2.2.1      # BaseSettings w Pydantic 2.x

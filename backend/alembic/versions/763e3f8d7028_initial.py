@@ -1,21 +1,15 @@
-"""initial
-
-Revision ID: 763e3f8d7028
-Revises: None
-Create Date: 2025-07-21 00:00:00
-
-"""
+"""initial Revision ID: 763e3f8d7028 - Initial database schema creation"""
 from alembic import op
 import sqlalchemy as sa
 
-# revision identifiers, used by Alembic.
+# revision identifiers
 revision = '763e3f8d7028'
 down_revision = None
 branch_labels = None
 depends_on = None
 
 def upgrade():
-    # Create users table
+    # Users table
     op.create_table('users',
         sa.Column('id', sa.Integer(), primary_key=True),
         sa.Column('email', sa.String(length=255), nullable=False),
@@ -24,7 +18,7 @@ def upgrade():
         sa.Column('created_at', sa.DateTime(), nullable=False),
         sa.UniqueConstraint('email', name='uq_users_email')
     )
-    # Create articles table
+    # Articles table
     op.create_table('articles',
         sa.Column('id', sa.Integer(), primary_key=True),
         sa.Column('title', sa.String(length=200), nullable=False),
@@ -39,7 +33,7 @@ def upgrade():
         sa.Column('instagram_posted_at', sa.DateTime()),
         sa.Column('created_at', sa.DateTime(), nullable=False)
     )
-    # Create feedback table
+    # Feedback table
     op.create_table('feedback',
         sa.Column('id', sa.Integer(), primary_key=True),
         sa.Column('message', sa.Text(), nullable=False),
@@ -49,14 +43,14 @@ def upgrade():
         sa.Column('resolved_at', sa.DateTime()),
         sa.Column('created_at', sa.DateTime(), nullable=False)
     )
-    # Create analytics table
+    # Analytics events table
     op.create_table('analytics',
         sa.Column('id', sa.Integer(), primary_key=True),
         sa.Column('event_type', sa.String(length=50), nullable=False),
         sa.Column('event_data', sa.Text()),
         sa.Column('created_at', sa.DateTime(), nullable=False)
     )
-    # Create versions table (depends on articles)
+    # Versions table (depends on articles)
     op.create_table('versions',
         sa.Column('id', sa.Integer(), primary_key=True),
         sa.Column('article_id', sa.Integer(), sa.ForeignKey('articles.id', ondelete='CASCADE'), nullable=False),
@@ -65,7 +59,7 @@ def upgrade():
     )
 
 def downgrade():
-    # Drop tables in reverse order of creation (consider foreign key dependencies)
+    # Drop tables in reverse order of creation (due to FKs)
     op.drop_table('versions')
     op.drop_table('analytics')
     op.drop_table('feedback')
