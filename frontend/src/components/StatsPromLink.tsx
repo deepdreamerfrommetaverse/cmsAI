@@ -1,3 +1,5 @@
+import React from "react";
+
 // Could display a link or promotion stats; placeholder implementation
 const StatsPromLink: React.FC = () => {
   return (

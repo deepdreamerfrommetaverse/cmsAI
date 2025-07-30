@@ -12,3 +12,9 @@ class TokenSchema(BaseModel):
 class AccessToken(BaseModel):
     access_token: str
     token_type: str = "bearer"
+from pydantic import BaseModel, EmailStr
+
+
+class LoginIn(BaseModel):
+    email: EmailStr
+    password: str

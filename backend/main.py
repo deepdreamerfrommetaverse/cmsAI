@@ -97,28 +97,16 @@ async def shutdown_event():
     await stop_scheduler()
 
 # ---------- API routery ----------
-app.include_router(auth_router.router, prefix="/auth", tags=["Auth"])
-app.include_router(
-    users_router.router,
-    prefix="/users",
-    tags=["Users"],
-    dependencies=[Depends(get_current_admin)],
-)
-app.include_router(articles_router.router, prefix="/articles", tags=["Articles"])
-app.include_router(feedback_router.router, prefix="/feedback", tags=["Feedback"])
-app.include_router(analytics_router.router, prefix="/analytics", tags=["Analytics"])
-app.include_router(
-    stripe_router.router,
-    prefix="/stripe",
-    tags=["Stripe"],
-    dependencies=[Depends(get_current_admin)],
-)
-app.include_router(
-    social_router.router,
-    prefix="/social",
-    tags=["Social"],
-    dependencies=[Depends(get_current_admin)],
-)
+API = "/api"
+
+app.include_router(auth_router.router,     prefix=f"{API}/auth",     tags=["Auth"])
+app.include_router(users_router.router,    prefix=f"{API}/users",    tags=["Users"], dependencies=[Depends(get_current_admin)])
+app.include_router(articles_router.router, prefix=f"{API}/articles", tags=["Articles"])
+app.include_router(feedback_router.router, prefix=f"{API}/feedback", tags=["Feedback"])
+app.include_router(analytics_router.router,prefix=f"{API}/analytics",tags=["Analytics"])
+app.include_router(stripe_router.router,   prefix=f"{API}/stripe",   tags=["Stripe"], dependencies=[Depends(get_current_admin)])
+app.include_router(social_router.router,   prefix=f"{API}/social",   tags=["Social"], dependencies=[Depends(get_current_admin)])
+
 
 # ---------- Lokalne uruchomienie ----------
 if __name__ == "__main__":

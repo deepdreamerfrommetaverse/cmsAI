@@ -1,11 +1,11 @@
-import axios from 'axios';
+import api from "@/lib/api";
 
 export function useSocial() {
   const tweetArticle = async (articleId: number) => {
-    await axios.post(`/api/articles/${articleId}/publish`);  // In our API, publish already tweets if not tweeted before
+    await api.post(`/api/social/twitter/${articleId}`);
   };
   const postInstagram = async (articleId: number) => {
-    await axios.post(`/api/articles/${articleId}/publish`);  // Same as above, Instagram posting is part of publish
+    await api.post(`/api/social/instagram/${articleId}`);
   };
   return { tweetArticle, postInstagram };
 }

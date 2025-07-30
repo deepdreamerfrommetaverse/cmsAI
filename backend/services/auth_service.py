@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from core.auth import verify_password, get_password_hash
 from models.user import User
+from core.settings import settings
 
 def authenticate_user(db: Session, email: str, password: str):
     """Verify email and password, returning the user if valid or None if not."""

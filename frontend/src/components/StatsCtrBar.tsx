@@ -1,3 +1,5 @@
+import React from "react";
+
 // This might display a bar chart for CTR. We use placeholder content for now.
 const StatsCtrBar: React.FC<{ ctr?: number }> = ({ ctr }) => {
   const value = ctr || 0;

@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { useThemeConfig } from '../context/ThemeConfigContext';
 import { useAuth } from '../context/AuthContext';
 import { FaBolt, FaImages, FaHistory, FaChartPie, FaThLarge, FaRobot, FaCog, FaCommentDots, FaMoon, FaSun } from 'react-icons/fa';
+import React from 'react';
 
 const Sidebar: React.FC = () => {
   const { darkMode, toggleTheme } = useThemeConfig();

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import axios from 'axios';
+import api from '@/lib/api';
 
 interface GeneratedArticle {
   id: number;
@@ -19,7 +19,7 @@ export function useGenerator() {
     setLoading(true);
     setError(null);
     try {
-      const res = await axios.post<GeneratedArticle>('/api/articles/generate', { topic });
+      const res = await api.post<GeneratedArticle>('/api/articles/generate', { topic });
       setResult(res.data);
     } catch (err: any) {
       console.error('Generation failed:', err);
@@ -32,7 +32,7 @@ export function useGenerator() {
   const publishArticle = async (articleId: number) => {
     // Publish a generated article
     try {
-      const res = await axios.post<GeneratedArticle>(`/api/articles/${articleId}/publish`);
+      const res = await api.post<GeneratedArticle>(`/api/articles/${articleId}/publish`);
       setResult(res.data);  // update with published info (wordpress_url etc.)
       return res.data;
     } catch (err) {

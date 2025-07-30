@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import Chart from 'chart.js/auto';
+import React from 'react';
 
 interface SourcesProps {
   sources: { [key: string]: number };

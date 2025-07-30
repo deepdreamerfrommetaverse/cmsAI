@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import axios from 'axios';
+import api from '../lib/api';
+import React from 'react';
 
 const DailySocialLimits: React.FC = () => {
   const [limits, setLimits] = useState<{twitter_used: number, twitter_limit: number, instagram_used: number, instagram_limit: number} | null>(null);
 
   const fetchLimits = async () => {
     try {
-      const res = await axios.get('/api/analytics/summary');
+      const res = await api.get('/api/analytics/summary');
       // Assuming summary includes social usage or adapt if separate endpoint
       if (res.data) {
         // Here we use published_articles as used for Twitter and maybe a field for IG usage

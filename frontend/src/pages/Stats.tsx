@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+import api from "@/lib/api";
 import StatsSourcesPie from '../components/StatsSourcesPie';
 import StatsCtrBar from '../components/StatsCtrBar';
 import StatsPromLink from '../components/StatsPromLink';
@@ -11,7 +11,7 @@ const Stats: React.FC = () => {
   useEffect(() => {
     const fetchSummary = async () => {
       try {
-        const res = await axios.get('/api/analytics/summary');
+        const res = await api.get('/api/analytics/summary');
         setSummary(res.data);
       } catch (err) {
         console.error('Failed to fetch analytics summary', err);

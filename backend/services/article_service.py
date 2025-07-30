@@ -1,8 +1,10 @@
 import difflib
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
+from fastapi import HTTPException
+import logging
 from core import openai_client
 from models.article import Article
 from models.version import Version
@@ -81,7 +83,7 @@ def publish_article(db: Session, article: Article):
     if article.published_at:
         raise HTTPException(status_code=400, detail="Article is already published")
     # Ensure WordPress integration is configured
-    if not (wordpress_service.is_configured()):
+    if not wordpress_service.is_configured():
         raise HTTPException(status_code=503, detail="WordPress integration not configured")
     # Generate hero image via OpenAI (if prompt available)
     image_bytes = None
@@ -93,7 +95,6 @@ def publish_article(db: Session, article: Article):
     except Exception as e:
         # Log image generation failure and continue without image
         msg = str(e)
-        logging = __import__("logging")  # import logging lazily
         logging.getLogger(__name__).warning(f"Image generation failed: {msg}. Publishing without image.")
         image_bytes = None
     # Publish to WordPress

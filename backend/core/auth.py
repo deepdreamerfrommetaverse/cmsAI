@@ -1,3 +1,10 @@
+"""
+Jedyny, oficjalny moduł odpowiedzialny za:
+• haszowanie haseł (bcrypt)
+• generowanie / weryfikację JWT (access & refresh)
+• zależności FastAPI get_current_user / get_current_admin
+"""
+
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -8,60 +15,79 @@ from passlib.context import CryptContext
 
 from core.settings import settings
 
-# JWT OAuth2 scheme for extracting tokens from Authorization header
+
+# ──────────────────────────────────────────────
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
-
-# Password hashing context (using bcrypt)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+ALGO = settings.algorithm
+KEY  = settings.secret_key
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plaintext password against the hashed password."""
-    return pwd_context.verify(plain_password, hashed_password)
+
+# ─────────── helpers ───────────
+def verify_password(plain: str, hashed: str) -> bool:
+    return pwd_context.verify(plain, hashed)
+
 
 def get_password_hash(password: str) -> str:
-    """Hash a plaintext password."""
     return pwd_context.hash(password)
 
+
+def _encode(payload: dict) -> str:
+    return jwt.encode(payload, KEY, algorithm=ALGO)
+
+
 def create_access_token(user_id: int) -> str:
-    """Generate a new JWT access token for the given user ID."""
-    expire = datetime.utcnow() + timedelta(minutes=settings.access_token_expire_minutes)
-    payload = {"user_id": user_id, "type": "access", "exp": expire}
-    token = jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
-    return token
+    exp = datetime.utcnow() + timedelta(minutes=settings.access_token_expire_minutes)
+    return _encode({"user_id": user_id, "type": "access", "exp": exp})
+
 
 def create_refresh_token(user_id: int) -> str:
-    """Generate a new JWT refresh token for the given user ID."""
-    expire = datetime.utcnow() + timedelta(minutes=settings.refresh_token_expire_minutes)
-    payload = {"user_id": user_id, "type": "refresh", "exp": expire}
-    token = jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
-    return token
+    exp = datetime.utcnow() + timedelta(minutes=settings.refresh_token_expire_minutes)
+    return _encode({"user_id": user_id, "type": "refresh", "exp": exp})
 
-async def get_current_user(token: str = Depends(oauth2_scheme)):
-    """Dependency to get the current logged-in User from JWT token."""
+
+def verify_refresh_token(token: str) -> int:
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        payload = jwt.decode(token, KEY, algorithms=[ALGO])
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token has expired")
+        raise HTTPException(401, "Refresh token expired")
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Could not validate credentials")
-    user_id: Optional[int] = payload.get("user_id")
-    token_type: Optional[str] = payload.get("type")
-    if user_id is None or token_type != "access":
-        raise HTTPException(status_code=401, detail="Could not validate credentials")
-    # Retrieve user from database
-    from models.user import User  # import here to avoid circular dependency
+        raise HTTPException(401, "Invalid refresh token")
+
+    if payload.get("type") != "refresh":
+        raise HTTPException(401, "Wrong token type")
+
+    return payload["user_id"]
+
+
+# ─────────── dependencies ───────────
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, KEY, algorithms=[ALGO])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(401, "Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(401, "Invalid token")
+
+    if payload.get("type") != "access":
+        raise HTTPException(401, "Wrong token type")
+
+    # pobranie użytkownika
     from database import SessionLocal
+    from models.user import User
+
     db = SessionLocal()
     try:
-        user = db.query(User).get(user_id)
+        user = db.query(User).get(payload["user_id"])
     finally:
         db.close()
+
     if not user:
-        raise HTTPException(status_code=401, detail="User not found")
+        raise HTTPException(401, "User not found")
     return user
 
+
 async def get_current_admin(current_user=Depends(get_current_user)):
-    """Dependency to allow only admin users."""
     if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin privileges required")
+        raise HTTPException(403, "Admin privileges required")
     return current_user

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import axios from 'axios';
-
+import api from "@/lib/api";
 interface RevenueData {
   total: number;
   currency: string;
@@ -14,7 +13,7 @@ export function useStripe() {
   useEffect(() => {
     const fetchRevenue = async () => {
       try {
-        const res = await axios.get<RevenueData>('/api/stripe/revenue');
+        const res = await api.get<RevenueData>('/api/stripe/revenue');
         setRevenue(res.data);
         if (res.data.error) {
           setError(res.data.error);

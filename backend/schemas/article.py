@@ -1,39 +1,52 @@
+from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel
 
+from pydantic import BaseModel, Field, ConfigDict, model_validator
+
+
+# ---------- schemat wejściowy – ręczne tworzenie ----------
 class ArticleCreate(BaseModel):
-    title: str
-    content: str
-    meta_description: Optional[str] = None
-    image_prompt: Optional[str] = None
+    title:            str = Field(..., max_length=200)
+    content:          str
+    meta_description: Optional[str] = Field(None, max_length=300)
+    image_prompt:     Optional[str] = None
 
+
+# ---------- wejściowy – AI‑generator ----------
 class ArticleGenerateRequest(BaseModel):
-    topic: Optional[str] = None
+    topic: str = Field(..., min_length=5, max_length=150)
 
+
+# ---------- częściowa aktualizacja ----------
 class ArticleUpdate(BaseModel):
-    title: Optional[str] = None
+    title:   Optional[str] = None
     content: Optional[str] = None
 
-    # Ensure at least one field is provided
-    @classmethod
-    def validate(cls, values):
-        if not values.get('title') and not values.get('content'):
-            raise ValueError("No new data provided for update")
+    # v2 – walidator AFTER; sprawdza, że coś faktycznie przyszło
+    @model_validator(mode="after")
+    def _at_least_one_field(cls, values):
+        if not (values.title or values.content):
+            raise ValueError("Provide at least one field to update")
         return values
 
-class ArticleOut(BaseModel):
-    id: int
-    title: str
-    content: str
-    meta_description: Optional[str]
-    image_prompt: Optional[str]
-    image_url: Optional[str]
-    wordpress_id: Optional[int]
-    wordpress_url: Optional[str]
-    published_at: Optional[str]
-    twitter_posted_at: Optional[str]
-    instagram_posted_at: Optional[str]
-    created_at: str
 
-    class Config:
-        orm_mode = True
+# ---------- schemat wyjściowy ----------
+class ArticleOut(BaseModel):
+    id:              int
+    title:           str
+    content:         str
+    meta_description:Optional[str]
+    image_prompt:    Optional[str]
+    image_url:       Optional[str]
+    wordpress_id:    Optional[int]
+    wordpress_url:   Optional[str]
+    published_at:    Optional[datetime]
+    twitter_posted_at:   Optional[datetime]
+    instagram_posted_at: Optional[datetime]
+    created_at:      datetime
+
+    # **tylko jedna** konfiguracja v2
+    model_config = ConfigDict(
+        from_attributes=True,                 # zastępuje orm_mode=True
+        json_encoders={datetime: lambda d: d.isoformat()},
+    )

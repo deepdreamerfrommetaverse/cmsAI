@@ -9,35 +9,37 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      test: ["CMD-SHELL","pg_isready -U $$POSTGRES_USER"]
       interval: 5s
       retries: 5
+    restart: unless-stopped
 
   backend:
-    build:
-      context: ./backend
+    build: ./backend
     image: cmsai-backend:latest
     container_name: cmsai_backend
     depends_on:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: ${DATABASE_URL}
-      SECRET_KEY: ${SECRET_KEY}
+      DATABASE_URL: ${DATABASE_URL}          # postgresql://user:pass@db:5432/ai_cms
+      SECRET_KEY:  ${SECRET_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
     expose:
       - "8000"
+    restart: unless-stopped
+
 
   frontend:
-    build:
-      context: ./frontend
+    build: ./frontend
     image: cmsai-frontend:latest
     container_name: cmsai_frontend
     depends_on:
       - backend
     ports:
       - "80:80"
+    restart: unless-stopped
 
 volumes:
   db_data:

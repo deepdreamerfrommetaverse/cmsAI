@@ -1,55 +1,54 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import axios from 'axios';
+import React, { createContext, useContext, useState, useEffect } from "react";
+import api from "@/lib/api";
 
-interface AuthContextType {
-  user: any;
+interface AuthCtx {
+  user: { id: number } | null;
   error: string | null;
-  login: (email: string, password: string) => Promise<void>;
+  login: (e: string, p: string) => Promise<void>;
   logout: () => void;
 }
+const AuthContext = createContext<AuthCtx>({} as AuthCtx);
 
-const AuthContext = createContext<AuthContextType>({} as AuthContextType);
-
-export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
-  const [user, setUser] = useState<any>(null);
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<AuthCtx["user"]>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Check for token in localStorage on load
+  // 1) token w localStorage → ustaw interceptor od razu
   useEffect(() => {
-    const storedToken = localStorage.getItem('access_token');
-    if (storedToken) {
-      // (Optional) We could verify token or fetch user info here.
-      setUser({ token: storedToken });
+    const tok = localStorage.getItem("access_token");
+    if (tok) {
+      api.defaults.headers.common.Authorization = `Bearer ${tok}`;
+      setUser({ id: 0 });              // (opcjonalnie: /me endpoint)
     }
   }, []);
 
+  // 2) login
   const login = async (email: string, password: string) => {
     try {
+      const { data } = await api.post("/auth/login", { email, password });
+      localStorage.setItem("access_token",  data.access_token);
+      localStorage.setItem("refresh_token", data.refresh_token);
+      api.defaults.headers.common.Authorization = `Bearer ${data.access_token}`;
+      setUser({ id: 0 });
       setError(null);
-      const res = await axios.post('/api/auth/login', { email, password });
-      const { access_token, refresh_token } = res.data;
-      // Save tokens
-      localStorage.setItem('access_token', access_token);
-      localStorage.setItem('refresh_token', refresh_token);
-      setUser({ token: access_token });
-      // Set auth header for future requests
-      axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
-    } catch (err: any) {
-      console.error('Login failed', err);
-      setError('Invalid credentials');
+    } catch (err) {
+      console.error(err);
+      setError("Invalid credentials");
       setUser(null);
     }
   };
 
+  // 3) logout
   const logout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+    delete api.defaults.headers.common.Authorization;
     setUser(null);
-    delete axios.defaults.headers.common['Authorization'];
   };
 
-  const value = { user, error, login, logout };
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, error, login, logout }}>
+           {children}
+         </AuthContext.Provider>;
 };
 
 export const useAuth = () => useContext(AuthContext);

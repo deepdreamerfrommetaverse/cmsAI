@@ -49,7 +49,7 @@ export default App;
 
 // A simple login form component within App (for brevity)
 import { useState } from 'react';
-import { useAuth } from './context/AuthContext';
+import React from 'react';
 
 function LoginForm() {
   const { login, error } = useAuth();

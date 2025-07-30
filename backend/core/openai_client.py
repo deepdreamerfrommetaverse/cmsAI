@@ -1,72 +1,99 @@
+"""
+OpenAI helper – generuje artykuł oraz obraz hero.
+
+Kompatybilny z openai‑python ≥ 1.0.
+"""
+
+from datetime import datetime
 import json
 import base64
-import openai
+from typing import TypedDict
+
+from openai import OpenAI, OpenAIError
 from fastapi import HTTPException
 
 from core.settings import settings
 
-# Configure OpenAI API key
-openai.api_key = settings.openai_api_key
 
-def generate_article(topic: str) -> dict:
-    """Use OpenAI ChatCompletion to generate an article (title, content, meta, image prompt) for the given topic."""
-    # System and user instructions for the AI
-    system_prompt = "You are an expert blog writer."
-    user_prompt = (
-        f"Write a detailed article about \"{topic}\". The article should be at least 800 words long, well-structured with headings and paragraphs, and may include lists if appropriate.\n\n"
-        "Also provide:\n"
-        "- A suitable title for the article.\n"
-        "- A concise SEO meta description (max 155 characters).\n"
-        "- A creative prompt for an image that would serve as a good illustration (hero image) for the article.\n\n"
-        "Output all results in JSON format with keys: title, content, meta_description, image_prompt. Do NOT include any text outside the JSON."
+# ──────────────────────────────────────────────
+client = OpenAI(api_key=settings.openai_api_key)
+
+
+class ArticleJSON(TypedDict):
+    title: str
+    content: str
+    meta_description: str
+    image_prompt: str
+
+
+# ─────────── helpers ───────────
+def _strip_md(txt: str) -> str:
+    """Usuń ```json … ``` z odpowiedzi modelu, jeśli je dodał."""
+    txt = txt.strip()
+    if txt.startswith("```"):
+        txt = txt.strip("`\n ")
+        if txt.lower().startswith("json"):
+            txt = txt[4:].strip()
+        if txt.endswith("```"):
+            txt = txt[: txt.rfind("```")].strip()
+    return txt
+
+
+# ─────────── API ───────────
+def generate_article(topic: str) -> ArticleJSON:
+    """
+    Zwraca dict:
+    {title, content, meta_description, image_prompt}
+    """
+    sys_msg = "You are an expert blog writer."
+    usr_msg = (
+        f'Write a detailed article about "{topic}". '
+        "Return JSON with keys: title, content (min 800 words), "
+        "meta_description (≤155 chars), image_prompt."
     )
+
     try:
-        response = openai.ChatCompletion.create(
+        resp = client.chat.completions.create(
             model=settings.openai_model,
             messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "system", "content": sys_msg},
+                {"role": "user", "content": usr_msg},
             ],
-            max_tokens=1500,
-            temperature=0.7
+            temperature=0.7,
         )
-    except Exception as e:
-        # Catch any OpenAI API errors
-        raise HTTPException(status_code=502, detail=f"OpenAI API error: {str(e)}")
-    # Extract and parse the assistant's JSON response
-    content = response.choices[0].message.content.strip()
-    # Remove any markdown formatting (e.g., ```json blocks)
-    if content.startswith("```"):
-        content = content.strip("`\n ")
-        if content.lower().startswith("json"):
-            content = content[4:].strip()
-        if content.endswith("```"):
-            content = content[:content.rfind("```")].strip()
+    except OpenAIError as e:
+        raise HTTPException(502, f"OpenAI API error: {e}")
+
+    raw = resp.choices[0].message.content
     try:
-        result = json.loads(content)
-    except json.JSONDecodeError as e:
-        # If JSON parsing fails
-        raise HTTPException(status_code=502, detail="OpenAI response parsing failed")
-    return result
+        data: ArticleJSON = json.loads(_strip_md(raw))
+    except json.JSONDecodeError:
+        raise HTTPException(502, "OpenAI response parsing failed")
+    return data
+
 
 def generate_image(prompt: str):
-    """Generate an image using OpenAI's DALL-E for the given prompt. Returns (bytes, mime_type, extension)."""
+    """
+    Zwraca (bytes, mime_type, ext)
+    """
     if not settings.openai_api_key:
-        raise HTTPException(status_code=503, detail="OpenAI API key not configured")
+        raise HTTPException(503, "OpenAI API key not configured")
+
     try:
-        response = openai.Image.create(prompt=prompt, n=1, size=settings.openai_image_size, response_format="b64_json")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"OpenAI image generation failed: {str(e)}")
-    b64_data = response["data"][0]["b64_json"]
-    image_bytes = base64.b64decode(b64_data)
-    # Determine image format
-    if image_bytes[:4] == b'\x89PNG':
-        content_type = "image/png"
-        ext = "png"
-    elif image_bytes[:2] == b'\xff\xd8':
-        content_type = "image/jpeg"
-        ext = "jpg"
-    else:
-        content_type = "image/png"
-        ext = "png"
-    return image_bytes, content_type, ext
+        img_resp = client.images.generate(
+            prompt=prompt,
+            n=1,
+            size=settings.openai_image_size,
+            response_format="b64_json",
+        )
+    except OpenAIError as e:
+        raise HTTPException(502, f"OpenAI image generation failed: {e}")
+
+    b64_data = img_resp.data[0].b64_json
+    img_bytes = base64.b64decode(b64_data)
+
+    if img_bytes.startswith(b"\x89PNG"):
+        return img_bytes, "image/png", "png"
+    if img_bytes.startswith(b"\xff\xd8"):
+        return img_bytes, "image/jpeg", "jpg"
+    return img_bytes, "application/octet-stream", "bin"

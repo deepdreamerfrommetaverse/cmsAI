@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import axios from 'axios';
+import api from "@/lib/api";
 
 interface ArticleInfo {
   id: number;
@@ -16,7 +16,7 @@ export function useHistory() {
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const res = await axios.get<ArticleInfo[]>('/api/articles');
+        const res = await api.get<ArticleInfo[]>('/api/articles');
         setArticles(res.data);
       } catch (err) {
         console.error('Failed to load history:', err);
