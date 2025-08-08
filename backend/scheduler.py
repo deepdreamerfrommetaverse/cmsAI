@@ -43,7 +43,7 @@ async def run_scheduler():
                 else:
                     if settings.openai_api_key:
                         logger.info("No drafts – generating new article via AI.")
-                        new_article = article_service.generate_article(db)
+                        new_article = article_service.create_article(db, )
                         article_service.publish_article(db, new_article)
                     else:
                         logger.info("No drafts and OpenAI disabled – skipping.")
@@ -64,7 +64,7 @@ async def start_article_scheduler(app):
         await asyncio.sleep(interval * 3600)
         db: Session = SessionLocal()
         try:
-            article = article_service.generate_article(db, topic="fresh finance article")
+            article = article_service.create_article(db, topic="fresh finance article")
             article_service.publish_article(db, article)
             logger.info("Auto‑generated & published article ID=%s", article.id)
         except Exception as exc:

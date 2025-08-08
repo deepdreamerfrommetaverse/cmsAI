@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useGenerator } from '../hooks/useGenerator';
+import { useGenerator } from '@/hooks/useGenerator';
 
 const Generator: React.FC = () => {
   const [topic, setTopic] = useState('');

@@ -17,6 +17,9 @@ from fastapi.responses import RedirectResponse
 from core.settings import settings
 from core.auth import get_current_admin
 from database import get_db, SessionLocal, engine  # noqa: F401  (future use)
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+
 
 # === istniejące routery ===
 from routers import (
@@ -47,6 +50,8 @@ app = FastAPI(
     description="Automated CMS: OpenAI, WordPress+Bricks, DALL·E, Stripe, X, Instagram",
     version="1.1.0",
 )
+
+
 
 # ---------- CORS ----------
 app.add_middleware(
@@ -106,6 +111,18 @@ app.include_router(feedback_router.router, prefix=f"{API}/feedback", tags=["Feed
 app.include_router(analytics_router.router,prefix=f"{API}/analytics",tags=["Analytics"])
 app.include_router(stripe_router.router,   prefix=f"{API}/stripe",   tags=["Stripe"], dependencies=[Depends(get_current_admin)])
 app.include_router(social_router.router,   prefix=f"{API}/social",   tags=["Social"], dependencies=[Depends(get_current_admin)])
+
+
+# 1) katalog (ten sam, do którego zapisujesz obrazki)
+STATIC_ROOT = Path("static")
+STATIC_ROOT.mkdir(exist_ok=True)
+
+# 2) montujemy pod /static  →  http://backend:8000/static/…
+app.mount(
+    "/static",
+    StaticFiles(directory=STATIC_ROOT, html=False),  # html=False - nie podawaj index.html
+    name="static",
+)
 
 
 # ---------- Lokalne uruchomienie ----------

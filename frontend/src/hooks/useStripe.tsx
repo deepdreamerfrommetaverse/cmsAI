@@ -13,7 +13,7 @@ export function useStripe() {
   useEffect(() => {
     const fetchRevenue = async () => {
       try {
-        const res = await api.get<RevenueData>('/api/stripe/revenue');
+        const res = await api.get<RevenueData>('/stripe/revenue');
         setRevenue(res.data);
         if (res.data.error) {
           setError(res.data.error);

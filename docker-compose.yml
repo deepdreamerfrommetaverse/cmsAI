@@ -1,36 +1,57 @@
+version: "3.9"
+
 services:
+  # ─────────────── PostgreSQL (FastAPI) ───────────────
   db:
     image: postgres:15-alpine
     container_name: cmsai_db
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER:       ${POSTGRES_USER:-cmsai}
+      POSTGRES_PASSWORD:   ${POSTGRES_PASSWORD:-cmsai}
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-cmsai}:${POSTGRES_PASSWORD:-cmsai}@db:5432/cmsai
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL","pg_isready -U $$POSTGRES_USER"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cmsai} -d cmsai"]
       interval: 5s
       retries: 5
     restart: unless-stopped
 
+  # ─────────────── MariaDB (WordPress) ────────────────
+  mysql:
+    image: mariadb:11        # lekka, stabilna
+    container_name: cmsai_mysql
+    environment:
+      MYSQL_DATABASE:        ${WP_DB_NAME:-wordpress}
+      MYSQL_USER:            ${WP_DB_USER:-wordpress}
+      MYSQL_PASSWORD:        ${WP_DB_PASSWORD:-wordpress}
+      MYSQL_ROOT_PASSWORD:   ${WP_DB_ROOT_PASSWORD:-root}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ─────────────── FastAPI backend ────────────────────
   backend:
     build: ./backend
     image: cmsai-backend:latest
     container_name: cmsai_backend
+    env_file: .env         # OPENAI_API_KEY, SECRET_KEY, …
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-cmsai}:${POSTGRES_PASSWORD:-cmsai}@db:5432/cmsai
     depends_on:
       db:
         condition: service_healthy
-    environment:
-      DATABASE_URL: ${DATABASE_URL}          # postgresql://user:pass@db:5432/ai_cms
-      SECRET_KEY:  ${SECRET_KEY}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+    volumes:
+      - static_data:/app/static   # współdzielone obrazy, JSON-y
     expose:
       - "8000"
     restart: unless-stopped
 
-
+  # ─────────────── Vite/nginx frontend ────────────────
   frontend:
     build: ./frontend
     image: cmsai-frontend:latest
@@ -38,8 +59,32 @@ services:
     depends_on:
       - backend
     ports:
-      - "80:80"
+      - "80:80"             # publiczny adres frontendu
+    volumes:
+      - static_data:/usr/share/nginx/html/static:ro
     restart: unless-stopped
 
+  # ─────────────── WordPress + BricksBuilder ──────────
+  wordpress:
+    image: wordpress:6.5-php8.2-apache
+    container_name: cmsai_wordpress
+    environment:
+      WORDPRESS_DB_HOST:     mysql:3306
+      WORDPRESS_DB_USER:     ${WP_DB_USER:-wordpress}
+      WORDPRESS_DB_PASSWORD: ${WP_DB_PASSWORD:-wordpress}
+      WORDPRESS_DB_NAME:     ${WP_DB_NAME:-wordpress}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "8080:80"           # http://localhost:8080/wp-admin
+    volumes:
+      # Cały wp-content siedzi w repo → łatwo commitować pluginy/szablony
+      - ./docker/wordpress/wp-content:/var/www/html/wp-content
+    restart: unless-stopped
+
+# ──────────────────── Wspólne wolumeny ─────────────────
 volumes:
   db_data:
+  mysql_data:
+  static_data:

@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime
 from datetime import datetime
+from database import Base                # OK – po fixie z pkt 1
 
 from models import Base
 

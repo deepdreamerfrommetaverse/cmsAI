@@ -8,7 +8,7 @@ interface Props {
 const PdfExportButton: React.FC<Props> = ({ articleId }) => {
   const handleExport = async () => {
     try {
-      const res = await api.get(`/api/articles/${articleId}/export/pdf`, { responseType: 'blob' });
+      const res = await api.get(`/articles/${articleId}/export/pdf`, { responseType: 'blob' });
       // Create a download link for the PDF
       const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
       const link = document.createElement('a');

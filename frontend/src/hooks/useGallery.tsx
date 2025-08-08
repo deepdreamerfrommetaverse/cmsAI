@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import api from '@/lib/api';
+import api from "@/lib/api";
 
 interface ArticleBrief {
   id: number;
@@ -16,7 +16,7 @@ export function useGallery() {
     const fetchGallery = async () => {
       try {
         // Fetch all articles that have images (for simplicity fetch all and filter)
-        const res = await api.get<ArticleBrief[]>('/api/articles?published=true');
+        const res = await api.get<ArticleBrief[]>('/articles?published=true');
         const allArticles = res.data;
         const withImages = allArticles.filter(article => article.image_url);
         setItems(withImages);

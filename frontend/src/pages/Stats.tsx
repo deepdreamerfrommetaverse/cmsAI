@@ -11,7 +11,7 @@ const Stats: React.FC = () => {
   useEffect(() => {
     const fetchSummary = async () => {
       try {
-        const res = await api.get('/api/analytics/summary');
+        const res = await api.get('/analytics/summary');
         setSummary(res.data);
       } catch (err) {
         console.error('Failed to fetch analytics summary', err);

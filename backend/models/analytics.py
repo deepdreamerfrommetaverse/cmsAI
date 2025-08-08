@@ -1,3 +1,4 @@
+from database import Base                # OK – po fixie z pkt 1
 from sqlalchemy import Column, Integer, String, Text, DateTime
 from datetime import datetime
 

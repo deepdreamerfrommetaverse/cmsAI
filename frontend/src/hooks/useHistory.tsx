@@ -16,7 +16,7 @@ export function useHistory() {
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const res = await api.get<ArticleInfo[]>('/api/articles');
+        const res = await api.get<ArticleInfo[]>('/articles');
         setArticles(res.data);
       } catch (err) {
         console.error('Failed to load history:', err);

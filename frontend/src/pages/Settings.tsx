@@ -1,6 +1,6 @@
 import React from 'react';
-import { useThemeConfig } from '../context/ThemeConfigContext';
-import { useStripe } from '../hooks/useStripe';
+import { useThemeConfig } from '@/context/ThemeConfigContext';
+import { useStripe } from '@/hooks/useStripe';
 
 const Settings: React.FC = () => {
   const { darkMode, toggleTheme } = useThemeConfig();

@@ -11,8 +11,12 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["node"],          // <‑‑ to likwiduje błąd „Cannot find name 'process'”
 
+    "baseUrl": "src",
+    "paths": {
+      "@/*": ["*"]
+    },
+    "types": ["node", "vite/client"]
   },
   "include": ["src"]
 }

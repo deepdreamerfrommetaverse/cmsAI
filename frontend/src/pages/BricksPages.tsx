@@ -17,7 +17,7 @@ const BricksPages: React.FC = () => {
     const fetchPages = async () => {
       try {
         // We will reuse articles list for "Bricks Pages" for now
-        const res = await api.get<PageInfo[]>('/api/articles?published=true');
+        const res = await api.get<PageInfo[]>('/articles?published=true');
         setPages(res.data);
       } catch (err) {
         console.error('Failed to load pages', err);
@@ -31,7 +31,7 @@ const BricksPages: React.FC = () => {
     // In a real scenario, we might check for conflict by comparing WP content vs DB content.
     // Here we'll simulate no conflict and directly call regenerate in backend (update content).
     try {
-      await api.put(`/api/articles/${id}`, { });  // triggers an update (if needed)
+      await api.put(`/articles/${id}`, { });  // triggers an update (if needed)
       alert('Article content regenerated (new version saved).');
     } catch (err) {
       console.error('Regenerate failed:', err);

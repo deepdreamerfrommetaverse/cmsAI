@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useAgent } from '../hooks/useAgent';
+import { useAgent } from '@/hooks/useAgent';
 
 const PromptAgent: React.FC = () => {
   const [prompt, setPrompt] = useState('');

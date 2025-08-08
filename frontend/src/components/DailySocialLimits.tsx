@@ -7,7 +7,7 @@ const DailySocialLimits: React.FC = () => {
 
   const fetchLimits = async () => {
     try {
-      const res = await api.get('/api/analytics/summary');
+      const res = await api.get('/analytics/summary');
       // Assuming summary includes social usage or adapt if separate endpoint
       if (res.data) {
         // Here we use published_articles as used for Twitter and maybe a field for IG usage

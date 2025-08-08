@@ -1,5 +1,5 @@
 import React from 'react';
-import { useHistory } from '../hooks/useHistory';
+import { useHistory } from '@/hooks/useHistory';
 import PdfExportButton from '../components/PdfExportButton';
 
 const History: React.FC = () => {

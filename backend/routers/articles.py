@@ -1,125 +1,165 @@
+from __future__ import annotations
+
 import re
+from datetime import datetime
+from typing import List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from schemas.article import ArticleCreate, ArticleGenerateRequest, ArticleUpdate, ArticleOut
+from starlette.responses import Response
+
+from core.auth import get_current_admin, get_current_user
 from database import get_db
+from schemas.article import (
+    ArticleCreate,
+    ArticleGenerateRequest,
+    ArticleOut,
+    ArticleUpdate,
+)
 from services import article_service
-from core.auth import get_current_user, get_current_admin
 
 router = APIRouter()
+Article = article_service.ArticleModel  # dla czytelności
 
-@router.get("/", response_model=list[ArticleOut])
-def list_articles(published: bool = None, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    """List all articles. Optionally filter by published status."""
-    query = db.query(article_service.ArticleModel)
+
+# ----------  helpers  -------------------------------------------------
+def _pdf_filename(title: str, art_id: int) -> str:
+    slug = re.sub(r"[^0-9a-zA-Z_-]", "_", title).lower() or f"article_{art_id}"
+    return f"{slug[:50]}.pdf"
+
+
+# ----------  CRUD  ----------------------------------------------------
+@router.get("/", response_model=List[ArticleOut])
+def list_articles(
+    published: Optional[bool] = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    q = db.query(Article).order_by(Article.created_at.desc())
     if published is True:
-        query = query.filter(article_service.ArticleModel.published_at.isnot(None))
+        q = q.filter(Article.published_at.isnot(None))
     elif published is False:
-        query = query.filter(article_service.ArticleModel.published_at.is_(None))
-    articles = query.order_by(article_service.ArticleModel.created_at.desc()).all()
-    return articles
+        q = q.filter(Article.published_at.is_(None))
+    return q.all()
+
 
 @router.get("/{article_id}", response_model=ArticleOut)
-def get_article(article_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    """Retrieve a specific article by ID."""
-    article = db.query(article_service.ArticleModel).get(article_id)
-    if not article:
-        raise HTTPException(status_code=404, detail="Article not found")
-    return article
+def get_article(
+    article_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    art = db.query(Article).get(article_id)
+    if not art:
+        raise HTTPException(404, "Article not found")
+    return art
+
 
 @router.post("/", response_model=ArticleOut)
-def create_article(article_in: ArticleCreate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    """Create a new article (manual content)."""
-    meta_desc = article_in.meta_description
-    if not meta_desc:
-        # Derive a simple meta description if not provided
-        meta_desc = (article_in.content[:155] or "")
-    image_prompt = article_in.image_prompt
-    new_article = article_service.ArticleModel(
-        title=article_in.title,
-        content=article_in.content,
-        meta_description=meta_desc,
-        image_prompt=image_prompt
-    )
-    db.add(new_article)
+def create_article(
+    data: ArticleCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    art = Article(**data.dict())
+    db.add(art)
     db.commit()
-    db.refresh(new_article)
-    return new_article
+    db.refresh(art)
+    return art
+
 
 @router.post("/generate", response_model=ArticleOut)
-def generate_article(request: ArticleGenerateRequest, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    """Generate a new article using AI (OpenAI)."""
-    topic = request.topic
-    generated = article_service.generate_article(db, topic)
-    return generated
+def generate_article(
+    req: ArticleGenerateRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return article_service.create_article(db, req.topic)
+
 
 @router.put("/{article_id}", response_model=ArticleOut)
-def update_article(article_id: int, update: ArticleUpdate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    """Update an existing article's title or content (creates a new version)."""
-    article = db.query(article_service.ArticleModel).get(article_id)
-    if not article:
-        raise HTTPException(status_code=404, detail="Article not found")
-    updated_article = article_service.update_article(
+def update_article(
+    article_id: int,
+    data: ArticleUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    art = db.query(Article).get(article_id)
+    if not art:
+        raise HTTPException(404, "Article not found")
+    return article_service.update_article(
         db,
-        article,
-        update.title if update.title is not None else article.title,
-        update.content if update.content is not None else article.content
+        art,
+        data.title or art.title,
+        data.content or art.content,
     )
-    return updated_article
+
 
 @router.delete("/{article_id}", status_code=204)
-def delete_article(article_id: int, db: Session = Depends(get_db), current_admin=Depends(get_current_admin)):
-    """Delete an article and its version history (admin only)."""
-    article = db.query(article_service.ArticleModel).get(article_id)
-    if not article:
-        raise HTTPException(status_code=404, detail="Article not found")
-    db.delete(article)
+def delete_article(
+    article_id: int,
+    db: Session = Depends(get_db),
+    current_admin=Depends(get_current_admin),
+):
+    art = db.query(Article).get(article_id)
+    if not art:
+        raise HTTPException(404, "Article not found")
+    db.delete(art)
     db.commit()
     return None
 
-@router.post("/{article_id}/publish", response_model=ArticleOut)
-def publish_article(article_id: int, db: Session = Depends(get_db), current_admin=Depends(get_current_admin)):
-    """Publish an article to WordPress and share on social media (admin only)."""
-    article = db.query(article_service.ArticleModel).get(article_id)
-    if not article:
-        raise HTTPException(status_code=404, detail="Article not found")
-    published_article = article_service.publish_article(db, article)
-    return published_article
 
-@router.get("/{article_id}/versions", response_model=list[dict])
-def get_article_versions(article_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    """Get version history of an article."""
-    article = db.query(article_service.ArticleModel).get(article_id)
-    if not article:
-        raise HTTPException(status_code=404, detail="Article not found")
-    versions = article.versions  # relationship defined in Article model
-    # Return list of diffs with timestamps
+# ----------  actions  -------------------------------------------------
+@router.post("/{article_id}/publish", response_model=ArticleOut)
+def publish_article(
+    article_id: int,
+    db: Session = Depends(get_db),
+    current_admin=Depends(get_current_admin),
+):
+    art = db.query(Article).get(article_id)
+    if not art:
+        raise HTTPException(404, "Article not found")
+    return article_service.publish_article(db, art)
+
+
+@router.get("/{article_id}/versions", response_model=List[dict])
+def versions(
+    article_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    art = db.query(Article).get(article_id)
+    if not art:
+        raise HTTPException(404, "Article not found")
     return [
-        {"id": v.id, "created_at": v.created_at.isoformat(), "diff": v.diff}
-        for v in sorted(versions, key=lambda x: x.created_at, reverse=True)
+        {
+            "id": v.id,
+            "created_at": v.created_at.isoformat(),
+            "diff": v.diff,
+        }
+        for v in sorted(art.versions, key=lambda x: x.created_at, reverse=True)
     ]
 
+
 @router.get("/{article_id}/export/pdf")
-def export_article_pdf(article_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    """Export an article as PDF."""
-    article = db.query(article_service.ArticleModel).get(article_id)
-    if not article:
-        raise HTTPException(status_code=404, detail="Article not found")
-    # Build HTML content for PDF
-    # [zmiana] Używamy prawidłowych znaczników HTML zamiast Markdown:
-    html_content = (
-        f"<html><head><meta charset='UTF-8'><title>{article.title}</title></head><body>"
-        f"<h1>{article.title}</h1>"
-        f"<div>{article.content}</div>"
-        f"</body></html>"
+def export_pdf(
+    article_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    art = db.query(Article).get(article_id)
+    if not art:
+        raise HTTPException(404, "Article not found")
+
+    html = (
+        f"<html><head><meta charset='UTF-8'><title>{art.title}</title></head><body>"
+        f"<h1>{art.title}</h1><div>{art.content}</div></body></html>"
     )
     from weasyprint import HTML
-    pdf_bytes = HTML(string=html_content).write_pdf()
-    # Generate filename slug
-    slug = re.sub(r'[^0-9a-zA-Z_-]', '_', article.title).lower()
-    if not slug:
-        slug = f"article_{article.id}"
-    filename = slug[:50] + ".pdf"
-    from starlette.responses import Response
-    headers = {"Content-Disposition": f"attachment; filename={filename}"}
-    return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
+
+    pdf_bytes = HTML(string=html).write_pdf()
+    return Response(
+        pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={_pdf_filename(art.title, art.id)}"},
+    )

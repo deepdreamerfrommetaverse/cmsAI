@@ -1,144 +1,195 @@
-import difflib
-import random
+"""
+Logika artykułów:
+• generowanie treści + obrazu (OpenAI)
+• zapis JPG/PNG do /static
+• wersjonowanie diff-ów
+• publikacja do WordPressa + social
+"""
+
+from __future__ import annotations
+
+import logging
+import uuid
 from datetime import datetime, timedelta
+from difflib import unified_diff
+from pathlib import Path
+from typing import Tuple
+
+import requests
 from sqlalchemy.orm import Session
 
-from fastapi import HTTPException
-import logging
-from core import openai_client
+from core.settings import settings
+from core.openai_client import (
+    generate_article as _ai_generate_article,
+    generate_image as _ai_generate_image,
+)
 from models.article import Article
+ArticleModel = Article        # alias wymagany przez routers/articles.py
+
 from models.version import Version
 
-# Example topics for auto-generation if none provided
-DEFAULT_TOPICS = [
-    "the latest advancements in artificial intelligence",
-    "sustainable energy solutions in modern cities",
-    "the impact of blockchain on finance",
-    "health benefits of meditation",
-    "the future of space exploration",
-    "cybersecurity trends in 2025",
-    "the evolution of electric vehicles",
-    "effective remote work strategies",
-    "advancements in quantum computing",
-    "the importance of mental health awareness"
-]
-
-# Expose Article model for external use (e.g., scheduler)
-ArticleModel = Article
-
-def generate_article(db: Session, topic: str = None):
-    """Generate a new article (title, content, meta, image_prompt) using AI and save it to the database."""
-    # Choose a random topic if none provided
-    if not topic:
-        topic = random.choice(DEFAULT_TOPICS)
-    # Use OpenAI to generate article data
-    result = openai_client.generate_article(topic)
-    # Fallback handling if keys missing
-    title = result.get("title") or topic.title()
-    content = result.get("content") or ""
-    meta_desc = result.get("meta_description")
-    if not meta_desc:
-        # If AI didn't provide meta, use first 155 characters of content as meta description
-        meta_desc = content[:155]
-    image_prompt = result.get("image_prompt")
-    if not image_prompt:
-        image_prompt = f"An illustration of {title}"
-    # Create Article record
-    article = Article(
-        title=title,
-        content=content,
-        meta_description=meta_desc,
-        image_prompt=image_prompt
-    )
-    db.add(article)
-    db.commit()
-    db.refresh(article)
-    return article
-
-def update_article(db: Session, article: Article, new_title: str, new_content: str):
-    """Update an article's title/content and record the changes in version history."""
-    old_title = article.title
-    old_content = article.content
-    # Compute diff of changes
-    old_lines = [f"Title: {old_title}"] + old_content.splitlines()
-    new_lines = [f"Title: {new_title if new_title is not None else old_title}"] + new_content.splitlines()
-    diff_lines = difflib.unified_diff(old_lines, new_lines, fromfile="old", tofile="new", lineterm="")
-    diff_text = "\n".join(diff_lines)
-    # Only create version entry if there are changes
-    if new_title is not None or new_content is not None:
-        version = Version(article_id=article.id, diff=diff_text, created_at=datetime.utcnow())
-        db.add(version)
-    # Apply updates to article
-    if new_title is not None:
-        article.title = new_title
-    if new_content is not None:
-        article.content = new_content
-    db.commit()
-    db.refresh(article)
-    return article
-
-def publish_article(db: Session, article: Article):
-    """Publish an article to WordPress and share on social platforms."""
+# (opcjonalne) zewnętrzne moduły – jeśli nie istnieją, funkcje poniżej zignorują publikację
+try:
     from services import wordpress_service, social_service
-    if article.published_at:
-        raise HTTPException(status_code=400, detail="Article is already published")
-    # Ensure WordPress integration is configured
-    if not wordpress_service.is_configured():
-        raise HTTPException(status_code=503, detail="WordPress integration not configured")
-    # Generate hero image via OpenAI (if prompt available)
-    image_bytes = None
-    image_type = None
-    image_ext = None
-    try:
-        prompt = article.image_prompt or f"An illustration of {article.title}"
-        image_bytes, image_type, image_ext = openai_client.generate_image(prompt)
-    except Exception as e:
-        # Log image generation failure and continue without image
-        msg = str(e)
-        logging.getLogger(__name__).warning(f"Image generation failed: {msg}. Publishing without image.")
-        image_bytes = None
-    # Publish to WordPress
-    wp_id, wp_link, media_url = wordpress_service.publish_to_wordpress(article, image_bytes, image_type, image_ext)
-    # Update article with WordPress info
-    article.wordpress_id = wp_id
-    article.wordpress_url = wp_link
-    article.image_url = media_url
-    article.published_at = datetime.utcnow()
+except ImportError:  # repo nie ma jeszcze tych plików
+    wordpress_service = social_service = None  # type: ignore
+
+
+# ————————————————————————————————————
+STATIC_ROOT = Path("static")
+STATIC_ROOT.mkdir(exist_ok=True)
+log = logging.getLogger(__name__)
+# ————————————————————————————————————
+
+
+# ----------  helpers  -------------------------------------------------
+def _save_image(binary: bytes, ext: str) -> str:
+    """Zapisuje plik w `/static` i zwraca ścieżkę URL (Nginx alias)."""
+    fname = f"{uuid.uuid4().hex}.{ext}"
+    path = STATIC_ROOT / fname
+    path.write_bytes(binary)
+    return f"/static/{fname}"
+
+
+def _build_diff(old: str, new: str) -> str:
+    return "".join(
+        unified_diff(
+            old.splitlines(keepends=True),
+            new.splitlines(keepends=True),
+            fromfile="old",
+            tofile="new",
+            lineterm="",
+        )
+    )
+
+
+# ----------  główne API  ---------------------------------------------
+def create_article(db: Session, topic: str) -> Article:
+    """
+    • generuje (OpenAI) treść + obraz,
+    • przechowuje plik w /static,
+    • zapisuje rekord w DB.
+    """
+    ai = _ai_generate_article(topic)  # title, content, meta_description, image_prompt
+    img_b, _, ext = _ai_generate_image(ai["image_prompt"])
+    image_url = _save_image(img_b, ext)
+
+    art = Article(
+        title=ai["title"],
+        content=ai["content"],
+        meta_description=ai["meta_description"],
+        image_prompt=ai["image_prompt"],
+        image_url=image_url,
+    )
+    db.add(art)
     db.commit()
-    # Social sharing
+    db.refresh(art)
+    return art
+
+
+def update_article(
+    db: Session,
+    art: Article,
+    new_title: str,
+    new_content: str,
+) -> Article:
+    """
+    Aktualizuje artykuł **i** zapisuje diff do `t_versions`
+    (przy zmianie contentu).
+    """
+    if art.content != new_content:
+        ver = Version(
+            article_id=art.id,
+            diff=_build_diff(art.content, new_content),
+        )
+        db.add(ver)
+
+    art.title = new_title
+    art.content = new_content
+    db.commit()
+    db.refresh(art)
+    return art
+
+
+# ----------  publikacja  ---------------------------------------------
+def _maybe_publish_to_wordpress(art: Article, img_path: Path) -> Tuple[int, str, str]:
+    """
+    Zwraca: (wp_post_id, wp_link, wp_image_url).
+    Jeżeli WordPress nie jest skonfigurowany – zwraca same zera/puste str.
+    """
+    if not (wordpress_service and wordpress_service.is_configured()):
+        log.warning("WordPress not skonfigurowany – pomijam publikację.")
+        return 0, "", art.image_url or ""
+
+    wp_id, wp_link, media_url = wordpress_service.publish_to_wordpress(
+        art, img_path.read_bytes(), "image/jpeg", img_path.suffix.lstrip(".")
+    )
+    return wp_id, wp_link, media_url
+
+
+def _maybe_share_to_social(db: Session, art: Article) -> None:
+    if not social_service:
+        return
+
     now = datetime.utcnow()
-    # Twitter/X share
+
+    # ----------  Twitter / X  ----------
     if social_service.is_twitter_configured():
-        # Check daily limit for Twitter posts
-        tweets_last_24h = db.query(Article).filter(Article.twitter_posted_at != None, Article.twitter_posted_at >= (now - timedelta(days=1))).count()
-        if tweets_last_24h < social_service.MAX_TWITTER_POSTS_PER_DAY:
+        tweets24h = (
+            db.query(Article)
+            .filter(Article.twitter_posted_at.isnot(None))
+            .filter(Article.twitter_posted_at >= now - timedelta(days=1))
+            .count()
+        )
+        if tweets24h < social_service.MAX_TWITTER_POSTS_PER_DAY:
             try:
-                text = f"{article.title} {article.wordpress_url}"
-                if len(text) > 256:
-                    text = text[:253] + "..."
-                    text += " " + article.wordpress_url
-                if image_bytes:
-                    social_service.post_to_twitter(image_bytes, text)
-                else:
-                    social_service.post_to_twitter(None, text)
-                article.twitter_posted_at = datetime.utcnow()
-            except Exception as e:
-                logging.getLogger(__name__).error(f"Twitter post failed: {e}")
-        else:
-            logging.getLogger(__name__).warning("Daily Twitter post limit reached, skipping Twitter share.")
-    # Instagram share
-    if social_service.is_instagram_configured() and article.image_url:
-        ig_posts_last_24h = db.query(Article).filter(Article.instagram_posted_at != None, Article.instagram_posted_at >= (now - timedelta(days=1))).count()
-        if ig_posts_last_24h < social_service.MAX_IG_POSTS_PER_DAY:
+                social_service.post_to_twitter(None, f"{art.title} {art.wordpress_url}")
+                art.twitter_posted_at = datetime.utcnow()
+            except Exception as e:  # noqa: BLE001
+                log.error("Twitter share failed: %s", e)
+
+    # ----------  Instagram  ----------
+    if (
+        social_service.is_instagram_configured()
+        and art.image_url
+        and art.instagram_posted_at is None
+    ):
+        ig24h = (
+            db.query(Article)
+            .filter(Article.instagram_posted_at.isnot(None))
+            .filter(Article.instagram_posted_at >= now - timedelta(days=1))
+            .count()
+        )
+        if ig24h < social_service.MAX_IG_POSTS_PER_DAY:
             try:
-                caption = f"{article.title}\nRead more on {article.wordpress_url.split('//')[-1].split('/')[0]}."
-                social_service.post_to_instagram(article.image_url, caption)
-                article.instagram_posted_at = datetime.utcnow()
-            except Exception as e:
-                logging.getLogger(__name__).error(f"Instagram post failed: {e}")
-        else:
-            logging.getLogger(__name__).warning("Daily Instagram post limit reached, skipping Instagram share.")
-    # Save social timestamps
+                caption = f"{art.title}\n\nPełny wpis: {art.wordpress_url}"
+                social_service.post_to_instagram(art.image_url, caption)
+                art.instagram_posted_at = datetime.utcnow()
+            except Exception as e:  # noqa: BLE001
+                log.error("Instagram share failed: %s", e)
+
+
+def publish_article(db: Session, art: Article) -> Article:
+    """
+    • upload featured image,
+    • publikacja WordPress,
+    • (opcjonalnie) share na X / Instagram,
+    • aktualizacja pól w DB.
+    """
+    if art.published_at:
+        raise ValueError("Article already published")
+
+    img_path = STATIC_ROOT / Path(art.image_url).name
+    wp_id, wp_link, media_url = _maybe_publish_to_wordpress(art, img_path)
+
+    art.wordpress_id = wp_id or None
+    art.wordpress_url = wp_link or None
+    art.image_url = media_url or art.image_url
+    art.published_at = datetime.utcnow()
     db.commit()
-    db.refresh(article)
-    return article
+
+    _maybe_share_to_social(db, art)
+
+    db.commit()
+    db.refresh(art)
+    return art

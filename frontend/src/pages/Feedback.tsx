@@ -17,7 +17,7 @@ const Feedback: React.FC = () => {
 
   const loadFeedback = async () => {
     try {
-      const url = filter === 'all' ? '/api/feedback' : `/api/feedback?resolved=${filter === 'resolved'}`;
+      const url = filter === 'all' ? '/feedback' : `/feedback?resolved=${filter === 'resolved'}`;
       const res = await api.get<FeedbackItem[]>(url);
       setFeedbackList(res.data);
     } catch (err) {
@@ -30,7 +30,7 @@ const Feedback: React.FC = () => {
 
   const markResolved = async (id: number, resolved: boolean) => {
     try {
-      await api.patch(`/api/feedback/${id}`, { resolved });
+      await api.patch(`/feedback/${id}`, { resolved });
       // update list in state:
       setFeedbackList(prev => prev.map(f => f.id === id ? { ...f, resolved, resolved_at: resolved ? new Date().toISOString() : null } : f));
     } catch (err) {
@@ -41,7 +41,7 @@ const Feedback: React.FC = () => {
   const deleteFeedback = async (id: number) => {
     if (!confirm('Delete this feedback?')) return;
     try {
-      await api.delete(`/api/feedback/${id}`);
+      await api.delete(`/feedback/${id}`);
       setFeedbackList(prev => prev.filter(f => f.id !== id));
     } catch (err) {
       console.error('Failed to delete feedback', err);
